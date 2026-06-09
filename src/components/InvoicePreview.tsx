@@ -64,13 +64,13 @@ export function InvoicePreview({
         style={{ backgroundColor: headerColor }}
       >
         <div className="flex items-start justify-between gap-6">
-          <div className="flex items-start gap-4">
+          <div className="flex min-w-0 flex-1 items-start gap-4">
             {profile.logo_url && (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={profile.logo_url}
                 alt="Business logo"
-                className="h-14 w-14 rounded-md bg-white/10 object-contain p-1 ring-1 ring-white/20"
+                className="h-14 w-14 shrink-0 rounded-md bg-white/10 object-contain p-1 ring-1 ring-white/20"
               />
             )}
             <div>

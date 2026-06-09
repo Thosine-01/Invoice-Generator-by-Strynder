@@ -69,3 +69,26 @@ export interface Invoice {
   created_at: string;
   line_items?: LineItem[];
 }
+
+/** Pre-populated invoice data for the builder edit mode. */
+export interface InvoiceFormInitialData {
+  id: string;
+  invoice_number: string;
+  issue_date: string;
+  due_date: string | null;
+  currency: string;
+  header_color: string;
+  client_name: string;
+  client_address: string | null;
+  client_email: string | null;
+  client_phone: string | null;
+  payment_details: string | null;
+  notes: string | null;
+  vat_enabled: boolean;
+  vat_rate: number;
+  line_items: Array<{
+    description: string;
+    quantity: number;
+    unit_price: number;
+  }>;
+}

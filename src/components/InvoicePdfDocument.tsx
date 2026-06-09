@@ -45,6 +45,15 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     objectFit: "contain",
+    marginRight: 4,
+  },
+  logoWrap: {
+    width: 52,
+    height: 52,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 4,
+    padding: 4,
+    marginRight: 4,
   },
   businessName: {
     fontSize: 20,
@@ -240,8 +249,10 @@ export function InvoicePdfDocument({
           <View style={styles.headerRow}>
             <View style={styles.headerLeft}>
               {profile.logo_url && (
-                // eslint-disable-next-line jsx-a11y/alt-text
-                <Image src={profile.logo_url} style={styles.logo} />
+                <View style={styles.logoWrap}>
+                  {/* eslint-disable-next-line jsx-a11y/alt-text */}
+                  <Image src={profile.logo_url} style={styles.logo} />
+                </View>
               )}
               {showIdentity && (
                 <View>

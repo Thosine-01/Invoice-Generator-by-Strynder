@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { updateProfileAction } from "@/actions/profile";
+import { LogoUploadField } from "@/components/profile/LogoUploadField";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -22,10 +24,12 @@ import {
 } from "@/lib/constants";
 import type { BusinessProfile } from "@/lib/types";
 import {
+  logoFileSchema,
   profileSchema,
   type ProfileFormValues,
 } from "@/lib/validations/profile";
 import { cn } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
 
 interface ProfileFormProps {
   profile: BusinessProfile | null;
@@ -35,7 +39,6 @@ function toFormValues(profile: BusinessProfile | null): ProfileFormValues {
   return {
     ownerName: profile?.owner_name ?? "",
     businessName: profile?.business_name ?? "",
-    logoUrl: profile?.logo_url ?? "",
     address: profile?.address ?? "",
     phone: profile?.phone ?? "",
     email: profile?.email ?? "",
@@ -48,16 +51,17 @@ function toFormValues(profile: BusinessProfile | null): ProfileFormValues {
 }
 
 export function ProfileForm({ profile }: ProfileFormProps) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
   const [serverSuccess, setServerSuccess] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPersistSignal, setLogoPersistSignal] = useState(0);
 
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
     defaultValues: toFormValues(profile),
   });
-
-  const logoUrl = form.watch("logoUrl");
 
   function onSubmit(values: ProfileFormValues) {
     setServerError(null);
@@ -66,7 +70,6 @@ export function ProfileForm({ profile }: ProfileFormProps) {
     const formData = new FormData();
     formData.set("ownerName", values.ownerName);
     formData.set("businessName", values.businessName);
-    formData.set("logoUrl", values.logoUrl);
     formData.set("address", values.address);
     formData.set("phone", values.phone);
     formData.set("email", values.email);
@@ -74,8 +77,25 @@ export function ProfileForm({ profile }: ProfileFormProps) {
     formData.set("defaultCurrency", values.defaultCurrency);
     formData.set("defaultHeaderColor", values.defaultHeaderColor);
 
+    if (logoFile) {
+      const logoResult = logoFileSchema.safeParse(logoFile);
+      if (!logoResult.success) {
+        setServerError(
+          logoResult.error.issues[0]?.message ?? "Invalid logo file."
+        );
+        return;
+      }
+      formData.set("logo", logoFile);
+    }
+
     startTransition(async () => {
-      const result = await updateProfileAction({}, formData);
+      let result: Awaited<ReturnType<typeof updateProfileAction>>;
+      try {
+        result = await updateProfileAction({}, formData);
+      } catch {
+        setServerError("Logo must be 5MB or smaller.");
+        return;
+      }
 
       if (result?.error) {
         setServerError(result.error);
@@ -83,7 +103,13 @@ export function ProfileForm({ profile }: ProfileFormProps) {
       }
 
       if (result?.success) {
+        const hadLogoUpload = logoFile !== null;
         setServerSuccess(result.success);
+        setLogoFile(null);
+        if (hadLogoUpload) {
+          setLogoPersistSignal((n) => n + 1);
+        }
+        router.refresh();
       }
     });
   }
@@ -163,37 +189,11 @@ export function ProfileForm({ profile }: ProfileFormProps) {
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="logoUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Logo URL</FormLabel>
-                <FormControl>
-                  <Input
-                    type="url"
-                    placeholder="https://example.com/logo.png"
-                    {...field}
-                  />
-                </FormControl>
-                <p className="text-xs text-muted-foreground">
-                  Paste a public image URL for now. File upload comes in a later
-                  update.
-                </p>
-                {logoUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={logoUrl}
-                    alt="Logo preview"
-                    className="mt-2 h-16 w-16 rounded-md border object-contain"
-                    onError={(e) => {
-                      e.currentTarget.style.display = "none";
-                    }}
-                  />
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
+          <LogoUploadField
+            existingUrl={profile?.logo_url ?? null}
+            onFileChange={setLogoFile}
+            persistSignal={logoPersistSignal}
+            disabled={isPending}
           />
         </section>
 
@@ -327,7 +327,8 @@ export function ProfileForm({ profile }: ProfileFormProps) {
 
         <div className="border-t border-border pt-6">
           <Button type="submit" disabled={isPending}>
-            {isPending ? "Saving..." : "Save profile"}
+            {isPending && <Loader2 className="size-4 animate-spin" />}
+            {isPending ? "Uploading & saving..." : "Save profile"}
           </Button>
         </div>
       </form>

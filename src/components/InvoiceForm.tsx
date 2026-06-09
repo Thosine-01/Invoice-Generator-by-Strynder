@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { createInvoiceAction } from "@/actions/invoices";
+import { createInvoiceAction, updateInvoiceAction } from "@/actions/invoices";
 import { CurrencySelect } from "@/components/invoice/CurrencySelect";
 import { HeaderColorPicker } from "@/components/invoice/HeaderColorPicker";
 import { LineItemsEditor } from "@/components/invoice/LineItemsEditor";
@@ -25,6 +25,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -32,13 +33,10 @@ import {
   calculateLineTotal,
   parseLineItemRow,
 } from "@/lib/calculations";
-import {
-  DEFAULT_VAT_RATE,
-  HEADER_COLORS,
-  type Currency,
-} from "@/lib/constants";
+import { DEFAULT_VAT_RATE } from "@/lib/constants";
 import { generateInvoiceNumber, toInputDate } from "@/lib/format";
-import type { ProfileSnapshot } from "@/lib/types";
+import { buildInvoiceFormDefaults } from "@/lib/invoice-form";
+import type { InvoiceFormInitialData, ProfileSnapshot } from "@/lib/types";
 import {
   invoiceBuilderSchema,
   type InvoiceBuilderFormValues,
@@ -49,6 +47,7 @@ interface InvoiceFormProps {
   paymentDetailsText: string;
   defaultCurrency?: string;
   defaultHeaderColor?: string;
+  initialData?: InvoiceFormInitialData;
 }
 
 export function InvoiceForm({
@@ -56,34 +55,26 @@ export function InvoiceForm({
   paymentDetailsText,
   defaultCurrency = "NGN",
   defaultHeaderColor,
+  initialData,
 }: InvoiceFormProps) {
-  const [invoiceNumber] = useState(generateInvoiceNumber);
-  const [issueDate] = useState(toInputDate());
+  const isEditMode = !!initialData;
+  const [invoiceNumber] = useState(
+    () => initialData?.invoice_number ?? generateInvoiceNumber()
+  );
+  const [issueDate] = useState(
+    () => initialData?.issue_date ?? toInputDate()
+  );
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
 
-  const resolvedHeaderColor = HEADER_COLORS.some(
-    (c) => c.value === defaultHeaderColor
-  )
-    ? (defaultHeaderColor as InvoiceBuilderFormValues["headerColor"])
-    : HEADER_COLORS[0].value;
-
   const form = useForm<InvoiceBuilderFormValues>({
     resolver: zodResolver(invoiceBuilderSchema),
-    defaultValues: {
-      dueDate: "",
-      currency: (defaultCurrency as Currency) || "NGN",
-      headerColor: resolvedHeaderColor,
-      clientName: "",
-      clientAddress: "",
-      clientEmail: "",
-      clientPhone: "",
-      paymentDetails: paymentDetailsText,
-      notes: "",
-      vatEnabled: false,
-      vatRate: String(DEFAULT_VAT_RATE),
-      lineItems: [{ description: "", quantity: "1", unitPrice: "" }],
-    },
+    defaultValues: buildInvoiceFormDefaults({
+      paymentDetailsText,
+      defaultCurrency,
+      defaultHeaderColor,
+      initialData,
+    }),
   });
 
   const watched = form.watch();
@@ -158,7 +149,10 @@ export function InvoiceForm({
         formData.append("lineUnitPrice", String(line.unitPrice));
       });
 
-      const result = await createInvoiceAction({}, formData);
+      const result = isEditMode
+        ? await updateInvoiceAction(initialData.id, formData)
+        : await createInvoiceAction({}, formData);
+
       if (result?.error) setServerError(result.error);
     });
   }
@@ -192,11 +186,11 @@ export function InvoiceForm({
             <CardContent className="space-y-5">
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="grid gap-2">
-                  <FormLabel>Invoice number</FormLabel>
+                  <Label>Invoice number</Label>
                   <Input value={invoiceNumber} readOnly />
                 </div>
                 <div className="grid gap-2">
-                  <FormLabel>Date of issue</FormLabel>
+                  <Label>Date of issue</Label>
                   <Input type="date" value={issueDate} readOnly />
                 </div>
                 <FormField
@@ -430,7 +424,11 @@ export function InvoiceForm({
 
           <div className="flex flex-wrap gap-3">
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Saving..." : "Save & view invoice"}
+              {isPending
+                ? "Saving..."
+                : isEditMode
+                  ? "Update & view invoice"
+                  : "Save & view invoice"}
             </Button>
             <Button
               type="button"
@@ -440,7 +438,7 @@ export function InvoiceForm({
                 submitInvoice("draft", values)
               )}
             >
-              Save as draft
+              {isEditMode ? "Save draft changes" : "Save as draft"}
             </Button>
           </div>
         </form>

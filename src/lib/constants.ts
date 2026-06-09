@@ -20,3 +20,6 @@ export const CURRENCY_LABELS: Record<Currency, string> = {
 
 export const DEFAULT_VAT_RATE = 7.5;
 export const LOGO_BUCKET = "logos";
+export const LOGO_MAX_BYTES = 5 * 1024 * 1024;
+export const LOGO_ACCEPTED_MIME_TYPES = ["image/jpeg", "image/png"] as const;
+export const LOGO_ACCEPTED_EXTENSIONS = ".jpg,.jpeg,.png";

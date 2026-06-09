@@ -105,19 +105,96 @@ async function insertInvoiceWithLineItems(
   return { invoiceId: invoice.id, error: null };
 }
 
-export async function createInvoiceAction(
-  _prev: ActionResult,
-  formData: FormData
-): Promise<ActionResult> {
-  const user = await requireUser();
-  const supabase = await createClient();
+async function updateInvoiceWithLineItems(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  invoiceId: string,
+  userId: string,
+  rpcInvoice: Record<string, unknown>,
+  dbInvoice: Record<string, unknown>,
+  lineItemsPayload: Array<{
+    sort_order: number;
+    description: string;
+    quantity: number;
+    unit_price: number;
+    line_total: number;
+  }>
+): Promise<{ error: string | null }> {
+  const { error: rpcError } = await supabase.rpc(
+    "update_invoice_with_line_items",
+    {
+      p_invoice_id: invoiceId,
+      p_invoice: rpcInvoice,
+      p_line_items: lineItemsPayload,
+    }
+  );
 
+  if (!rpcError) {
+    return { error: null };
+  }
+
+  const { data: existing, error: fetchError } = await supabase
+    .from("invoices")
+    .select("id")
+    .eq("id", invoiceId)
+    .eq("user_id", userId)
+    .eq("status", "draft")
+    .single();
+
+  if (fetchError || !existing) {
+    return {
+      error:
+        rpcError.message ??
+        "Invoice not found or cannot be edited (only drafts are editable).",
+    };
+  }
+
+  const { error: updateError } = await supabase
+    .from("invoices")
+    .update(dbInvoice)
+    .eq("id", invoiceId)
+    .eq("user_id", userId)
+    .eq("status", "draft");
+
+  if (updateError) {
+    return { error: updateError.message };
+  }
+
+  const { error: deleteError } = await supabase
+    .from("line_items")
+    .delete()
+    .eq("invoice_id", invoiceId);
+
+  if (deleteError) {
+    return { error: deleteError.message };
+  }
+
+  const { error: lineError } = await supabase.from("line_items").insert(
+    lineItemsPayload.map((item) => ({
+      invoice_id: invoiceId,
+      ...item,
+    }))
+  );
+
+  if (lineError) {
+    return { error: lineError.message };
+  }
+
+  return { error: null };
+}
+
+function buildInvoiceFieldsFromForm(
+  formData: FormData,
+  user: Awaited<ReturnType<typeof requireUser>>
+) {
   const clientName = (formData.get("clientName") as string)?.trim();
-  if (!clientName) return { error: "Client name is required." };
+  if (!clientName) return { error: "Client name is required." as const };
 
   const lineItems = parseLineItems(formData);
   if (lineItems.length === 0) {
-    return { error: "Add at least one line item with a description and quantity." };
+    return {
+      error:
+        "Add at least one line item with a description and quantity." as const,
+    };
   }
 
   const vatEnabled = formData.get("vatEnabled") === "on";
@@ -129,28 +206,7 @@ export async function createInvoiceAction(
     paymentFromForm ?? formatPaymentDetails(user.paymentDetails) ?? null;
 
   const profileSnapshot = buildProfileSnapshot(user.profile);
-
-  const invoicePayload = {
-    user_id: user.id,
-    invoice_number: (formData.get("invoiceNumber") as string) || "INV-000",
-    issue_date: formData.get("issueDate") as string,
-    due_date: toNullable(formData.get("dueDate")),
-    currency: (formData.get("currency") as string) || "NGN",
-    client_name: clientName,
-    client_address: toNullable(formData.get("clientAddress")),
-    client_email: toNullable(formData.get("clientEmail")),
-    client_phone: toNullable(formData.get("clientPhone")),
-    payment_details: paymentText,
-    notes: toNullable(formData.get("notes")),
-    vat_enabled: vatEnabled,
-    vat_rate: vatRate,
-    subtotal: totals.subtotal,
-    vat_amount: totals.vatAmount,
-    grand_total: totals.grandTotal,
-    header_color: (formData.get("headerColor") as string) || "#1e3a5f",
-    profile_snapshot: profileSnapshot,
-    status: formData.get("status") === "draft" ? "draft" : "finalized",
-  };
+  const status = formData.get("status") === "draft" ? "draft" : "finalized";
 
   const lineItemsPayload = lineItems.map((item, i) => ({
     sort_order: i + 1,
@@ -160,32 +216,81 @@ export async function createInvoiceAction(
     line_total: calculateLineTotal(item.quantity, item.unitPrice),
   }));
 
-  const rpcInvoicePayload = {
+  const rpcInvoice = {
+    due_date: toNullable(formData.get("dueDate")) ?? "",
+    currency: (formData.get("currency") as string) || "NGN",
+    client_name: clientName,
+    client_address: toNullable(formData.get("clientAddress")) ?? "",
+    client_email: toNullable(formData.get("clientEmail")) ?? "",
+    client_phone: toNullable(formData.get("clientPhone")) ?? "",
+    payment_details: paymentText ?? "",
+    notes: toNullable(formData.get("notes")) ?? "",
+    vat_enabled: vatEnabled,
+    vat_rate: vatRate,
+    subtotal: totals.subtotal,
+    vat_amount: totals.vatAmount,
+    grand_total: totals.grandTotal,
+    header_color: (formData.get("headerColor") as string) || "#1e3a5f",
+    profile_snapshot: profileSnapshot,
+    status,
+  };
+
+  return {
+    lineItemsPayload,
+    rpcInvoice,
+    profileSnapshot,
+    paymentText,
+    totals,
+    vatEnabled,
+    vatRate,
+    clientName,
+    status,
+  };
+}
+
+export async function createInvoiceAction(
+  _prev: ActionResult,
+  formData: FormData
+): Promise<ActionResult> {
+  const user = await requireUser();
+  const supabase = await createClient();
+
+  const fields = buildInvoiceFieldsFromForm(formData, user);
+  if ("error" in fields) return { error: fields.error };
+
+  const invoicePayload = {
+    user_id: user.id,
+    invoice_number: (formData.get("invoiceNumber") as string) || "INV-000",
+    issue_date: formData.get("issueDate") as string,
+    due_date: toNullable(formData.get("dueDate")),
+    currency: fields.rpcInvoice.currency,
+    client_name: fields.clientName,
+    client_address: toNullable(formData.get("clientAddress")),
+    client_email: toNullable(formData.get("clientEmail")),
+    client_phone: toNullable(formData.get("clientPhone")),
+    payment_details: fields.paymentText,
+    notes: toNullable(formData.get("notes")),
+    vat_enabled: fields.vatEnabled,
+    vat_rate: fields.vatRate,
+    subtotal: fields.totals.subtotal,
+    vat_amount: fields.totals.vatAmount,
+    grand_total: fields.totals.grandTotal,
+    header_color: fields.rpcInvoice.header_color,
+    profile_snapshot: fields.profileSnapshot,
+    status: fields.status,
+  };
+
+  const rpcCreatePayload = {
+    ...fields.rpcInvoice,
     invoice_number: invoicePayload.invoice_number,
     issue_date: invoicePayload.issue_date,
-    due_date: invoicePayload.due_date ?? "",
-    currency: invoicePayload.currency,
-    client_name: invoicePayload.client_name,
-    client_address: invoicePayload.client_address ?? "",
-    client_email: invoicePayload.client_email ?? "",
-    client_phone: invoicePayload.client_phone ?? "",
-    payment_details: invoicePayload.payment_details ?? "",
-    notes: invoicePayload.notes ?? "",
-    vat_enabled: invoicePayload.vat_enabled,
-    vat_rate: invoicePayload.vat_rate,
-    subtotal: invoicePayload.subtotal,
-    vat_amount: invoicePayload.vat_amount,
-    grand_total: invoicePayload.grand_total,
-    header_color: invoicePayload.header_color,
-    profile_snapshot: profileSnapshot,
-    status: invoicePayload.status,
   };
 
   const { invoiceId, error } = await insertInvoiceWithLineItems(
     supabase,
-    rpcInvoicePayload,
+    rpcCreatePayload,
     invoicePayload,
-    lineItemsPayload
+    fields.lineItemsPayload
   );
 
   if (error || !invoiceId) {
@@ -194,6 +299,52 @@ export async function createInvoiceAction(
 
   revalidatePath("/dashboard");
   revalidatePath("/invoices");
+  redirect(`/invoices/${invoiceId}`);
+}
+
+export async function updateInvoiceAction(
+  invoiceId: string,
+  formData: FormData
+): Promise<ActionResult> {
+  const user = await requireUser();
+  const supabase = await createClient();
+
+  const fields = buildInvoiceFieldsFromForm(formData, user);
+  if ("error" in fields) return { error: fields.error };
+
+  const dbInvoice = {
+    due_date: toNullable(formData.get("dueDate")),
+    currency: fields.rpcInvoice.currency,
+    client_name: fields.clientName,
+    client_address: toNullable(formData.get("clientAddress")),
+    client_email: toNullable(formData.get("clientEmail")),
+    client_phone: toNullable(formData.get("clientPhone")),
+    payment_details: fields.paymentText,
+    notes: toNullable(formData.get("notes")),
+    vat_enabled: fields.vatEnabled,
+    vat_rate: fields.vatRate,
+    subtotal: fields.totals.subtotal,
+    vat_amount: fields.totals.vatAmount,
+    grand_total: fields.totals.grandTotal,
+    header_color: fields.rpcInvoice.header_color,
+    profile_snapshot: fields.profileSnapshot,
+    status: fields.status,
+  };
+
+  const { error } = await updateInvoiceWithLineItems(
+    supabase,
+    invoiceId,
+    user.id,
+    fields.rpcInvoice,
+    dbInvoice,
+    fields.lineItemsPayload
+  );
+
+  if (error) return { error };
+
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath("/dashboard");
   redirect(`/invoices/${invoiceId}`);
 }
 

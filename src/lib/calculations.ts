@@ -15,11 +15,16 @@ export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/** Round quantity to at most 1 decimal place. */
+export function roundQuantity(value: number): number {
+  return Number(value.toFixed(1));
+}
+
 /**
  * lineTotal = quantity × unitPrice
  */
 export function calculateLineTotal(quantity: number, unitPrice: number): number {
-  return roundMoney(quantity * unitPrice);
+  return roundMoney(roundQuantity(quantity) * unitPrice);
 }
 
 /**
@@ -58,7 +63,7 @@ export function parseLineItemRow(
   const trimmed = description.trim();
   if (!trimmed) return null;
 
-  const qty = parseFloat(quantity) || 0;
+  const qty = roundQuantity(parseFloat(quantity) || 0);
   const price = parseFloat(unitPrice) || 0;
 
   return {
@@ -66,4 +71,17 @@ export function parseLineItemRow(
     quantity: qty,
     unitPrice: price,
   };
+}
+
+/** Normalize quantity string input to at most 1 decimal place. */
+export function normalizeQuantityInput(value: string): string {
+  if (value === "" || value === "-") return value;
+
+  // Allow the user to finish typing a decimal (e.g. "1.")
+  if (/^\d+\.$/.test(value)) return value;
+
+  const num = parseFloat(value);
+  if (Number.isNaN(num)) return value;
+
+  return String(roundQuantity(num));
 }

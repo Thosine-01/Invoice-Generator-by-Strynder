@@ -78,6 +78,7 @@ export default async function InvoiceDetailPage({
         </div>
         <InvoiceDetailToolbar
           invoiceId={invoice.id}
+          isDraft={invoice.status === "draft"}
           previewProps={previewProps}
         />
       </div>

@@ -11,7 +11,11 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { calculateLineTotal } from "@/lib/calculations";
+import {
+  calculateLineTotal,
+  normalizeQuantityInput,
+  roundQuantity,
+} from "@/lib/calculations";
 import { formatCurrency } from "@/lib/format";
 import type { InvoiceBuilderFormValues } from "@/lib/validations/invoice";
 import { Plus, Trash2 } from "lucide-react";
@@ -113,11 +117,17 @@ function LineItemRow({
             <FormControl>
               <Input
                 type="number"
-                min="0.01"
-                step="0.01"
+                min="0.1"
+                step="0.1"
                 placeholder="1"
                 className="text-right"
-                {...field}
+                name={field.name}
+                ref={field.ref}
+                onBlur={field.onBlur}
+                value={field.value}
+                onChange={(e) => {
+                  field.onChange(normalizeQuantityInput(e.target.value));
+                }}
               />
             </FormControl>
             <FormMessage />
@@ -184,7 +194,7 @@ function LineTotalCell({
   });
 
   const total = calculateLineTotal(
-    parseFloat(quantity) || 0,
+    roundQuantity(parseFloat(quantity) || 0),
     parseFloat(unitPrice) || 0
   );
 

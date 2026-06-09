@@ -29,7 +29,8 @@ export default async function ProfilePage() {
         <CardHeader className="border-b border-border pb-6">
           <CardTitle className="text-lg">Your business</CardTitle>
           <CardDescription>
-            Identity, contact information, and invoice defaults in one place.
+            Identity, logo upload, contact information, and invoice defaults in
+            one place.
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
