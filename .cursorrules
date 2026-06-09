@@ -1,0 +1,10 @@
+# Design & UI Guidelines for Invoice Generator
+- Use Tailwind CSS 4 for all styling.
+- Aesthetic: Premium, minimalist, generous whitespace, clean typography.
+- Avoid cluttered interfaces. Emphasise ease of use.
+- Use a neutral background (e.g., bg-gray-50) with crisp white cards for forms.
+- Buttons should have subtle hover states and focus rings for accessibility.
+- Forms must have clear labels, sensible default states, and helpful empty states.
+- For the Nigerian context, ensure phone number inputs default to or hint at +234, and currency defaults to ₦ (NGN).
+- Always use Lucide React for icons.
+- STRICT UI RULE: Never use legacy HTML form elements or custom utility classes like .btn-primary or .input. You must EXCLUSIVELY import and use the shadcn/ui components from @/components/ui for all buttons, inputs, cards, and tables.
