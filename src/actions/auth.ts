@@ -66,7 +66,7 @@ export async function registerAction(
   if (data.user && !data.session) {
     return {
       success:
-        "Account created. Check your email to confirm your address, then sign in.",
+        "Account created. Check your mail to verify, then sign in.",
     };
   }
 
