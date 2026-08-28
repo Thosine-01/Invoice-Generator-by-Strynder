@@ -1,11 +1,12 @@
 "use server";
 
+
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
-export type ActionResult = { error?: string; success?: string };
 
+export type ActionResult = { error?: string; success?: string };
 /**
  * Returns the base URL for auth redirects (verification emails, password resets).
  *
@@ -55,7 +56,8 @@ function mapAuthError(message: string, context: "login" | "register"): string {
 
 export async function registerAction(
   _prev: ActionResult,
-  formData: FormData
+  formData: FormData,
+  captchaToken?: string
 ): Promise<ActionResult> {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   const password = formData.get("password") as string;
@@ -77,6 +79,7 @@ export async function registerAction(
     password,
     options: {
       emailRedirectTo: `${await getBaseUrl()}/auth/confirm`,
+      captchaToken,
     },
   });
 
@@ -86,17 +89,18 @@ export async function registerAction(
 
   if (data.user && !data.session) {
     return {
-      success:
-        "Account created. Check your mail to verify, then sign in.",
+      success: "Account created. Check your mail to verify, then sign in.",
     };
   }
 
   redirect("/dashboard");
 }
 
+
 export async function loginAction(
   _prev: ActionResult,
-  formData: FormData
+  formData: FormData,
+  captchaToken?: string
 ): Promise<ActionResult> {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   const password = formData.get("password") as string;
@@ -106,7 +110,11 @@ export async function loginAction(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+    options: { captchaToken },
+  });
 
   if (error) {
     return { error: mapAuthError(error.message, "login") };
@@ -123,7 +131,8 @@ export async function logoutAction() {
 
 export async function forgotPasswordAction(
   _prev: ActionResult,
-  formData: FormData
+  formData: FormData,
+  captchaToken?: string
 ): Promise<ActionResult> {
   const email = (formData.get("email") as string)?.trim().toLowerCase();
   if (!email) return { error: "Email is required." };
@@ -131,6 +140,7 @@ export async function forgotPasswordAction(
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${await getBaseUrl()}/auth/confirm`,
+    captchaToken,
   });
 
   if (error) return { error: error.message };

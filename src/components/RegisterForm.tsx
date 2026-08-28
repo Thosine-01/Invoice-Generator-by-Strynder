@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { Turnstile, type TurnstileCApiInstance } from '@marsidev/react-turnstile'
 import { registerAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -24,6 +25,8 @@ export function RegisterForm() {
   const [isPending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
   const [serverSuccess, setServerSuccess] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string>();
+  const turnstileRef = useRef<TurnstileCApiInstance>(null);
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
@@ -55,7 +58,10 @@ export function RegisterForm() {
     formData.set("confirmPassword", values.confirmPassword);
 
     startTransition(async () => {
-      const result = await registerAction({}, formData);
+      const result = await registerAction({}, formData, captchaToken);
+
+      // reset in both branches — token is single-use either way
+      turnstileRef.current?.reset();
 
       if (result?.error) {
         setServerError(result.error);
@@ -188,7 +194,17 @@ export function RegisterForm() {
           )}
         />
 
-        <Button type="submit" className="w-full" disabled={isPending}>
+        <Turnstile
+          ref={turnstileRef}
+          siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY!}
+          onSuccess={(token) => setCaptchaToken(token)}
+        />
+
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isPending || !captchaToken}
+        >
           {isPending ? "Creating account..." : "Create account"}
         </Button>
       </form>
