@@ -3,7 +3,7 @@
 import { useState, useTransition, useRef } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Turnstile, type TurnstileCApiInstance } from '@marsidev/react-turnstile'
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile'
 import { registerAction } from "@/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -26,7 +26,7 @@ export function RegisterForm() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [serverSuccess, setServerSuccess] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string>();
-  const turnstileRef = useRef<TurnstileCApiInstance>(null);
+  const turnstileRef = useRef<TurnstileInstance>(null);
 
   const form = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
